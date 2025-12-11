@@ -1,15 +1,22 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { login } from '../services/authService';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { toast } from 'sonner';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { login } from "../services/authService";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { toast } from "sonner";
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -18,10 +25,10 @@ export default function Login() {
     setIsLoading(true);
     try {
       await login({ email, password });
-      toast.success('Logged in successfully');
-      navigate('/');
+      toast.success("Logged in successfully");
+      navigate("/");
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Login failed');
+      toast.error(error.response?.data?.message || "Login failed");
     } finally {
       setIsLoading(false);
     }
@@ -32,7 +39,9 @@ export default function Login() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Login</CardTitle>
-          <CardDescription>Enter your credentials to access the dashboard.</CardDescription>
+          <CardDescription>
+            Enter your credentials to access the dashboard.
+          </CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
@@ -58,9 +67,9 @@ export default function Login() {
               />
             </div>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex justify-center mt-4">
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Logging in...' : 'Login'}
+              {isLoading ? "Logging in..." : "Login"}
             </Button>
           </CardFooter>
         </form>
@@ -68,4 +77,3 @@ export default function Login() {
     </div>
   );
 }
-

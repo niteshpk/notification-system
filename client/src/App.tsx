@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState, useEffect } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -6,6 +6,7 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigate,
 } from "react-router-dom";
 import {
   BarChart3,
@@ -16,6 +17,7 @@ import {
   TestTube,
   Users,
   X,
+  LogOut,
   type LucideIcon,
 } from "lucide-react";
 import { ApiManagement } from "./components/ApiManagement";
@@ -24,6 +26,8 @@ import { NotificationPreferences } from "./components/NotificationPreferences";
 import { NotificationTesting } from "./components/NotificationTesting";
 import { SystemSettings } from "./components/SystemSettings";
 import { UserManagement } from "./components/UserManagement";
+import Login from "./components/Login";
+import { getCurrentUser, logout } from "./services/authService";
 
 type NavigationItem = {
   id: string;
@@ -42,14 +46,31 @@ const navigation: NavigationItem[] = [
   { id: "api", name: "API Management", icon: Code, path: "/api", element: <ApiManagement /> },
 ];
 
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const user = getCurrentUser();
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
 function Shell() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate();
+  const user = getCurrentUser();
 
   const activePage = useMemo(
     () => navigation.find((item) => location.pathname.startsWith(item.path)),
     [location.pathname],
   );
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  if (!user) return <Navigate to="/login" replace />;
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -92,14 +113,19 @@ function Shell() {
           </nav>
 
           <div className="border-t border-gray-200 p-4">
-            <div className="flex items-center gap-3 px-4 py-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold">
-                A
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold">
+                  {user.username.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="text-sm font-medium">{user.username}</div>
+                  <div className="text-xs text-gray-500">{user.email}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-sm font-medium">Admin User</div>
-                <div className="text-xs text-gray-500">admin@notifyhub.com</div>
-              </div>
+               <button onClick={handleLogout} className="text-gray-500 hover:text-red-500">
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
@@ -137,7 +163,6 @@ function Shell() {
               <Route key={item.id} path={item.path} element={item.element} />
             ))}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
       </div>
@@ -148,7 +173,17 @@ function Shell() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Shell />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <Shell />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
     </BrowserRouter>
   );
 }

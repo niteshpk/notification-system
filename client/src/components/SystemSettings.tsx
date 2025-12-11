@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, MessageSquare, Smartphone, CheckCircle, AlertCircle, Eye, EyeOff, Save } from 'lucide-react';
+import { getConfigs, createOrUpdateConfig, NotificationConfig } from '../services/configService';
+import { toast } from 'sonner';
 
 interface ChannelConfig {
   enabled: boolean;
@@ -7,68 +9,126 @@ interface ChannelConfig {
 }
 
 export function SystemSettings() {
-  const [activeTab, setActiveTab] = useState<'email' | 'sms' | 'fcm' | 'whatsapp'>('email');
+  const [activeTab, setActiveTab] = useState<'email' | 'sms' | 'fcm'>('email');
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
   const [channelStatus, setChannelStatus] = useState<Record<string, ChannelConfig>>({
-    email: { enabled: true, verified: true },
-    sms: { enabled: true, verified: true },
+    email: { enabled: false, verified: false },
+    sms: { enabled: false, verified: false },
     fcm: { enabled: false, verified: false },
-    whatsapp: { enabled: true, verified: false },
   });
 
   const [emailConfig, setEmailConfig] = useState({
-    smtpHost: 'smtp.gmail.com',
+    smtpHost: '',
     smtpPort: '587',
-    smtpUsername: 'notifications@example.com',
-    smtpPassword: '••••••••••••',
-    senderEmail: 'notifications@example.com',
-    senderName: 'NotifyHub',
-    encryption: 'TLS',
+    smtpUsername: '',
+    smtpPassword: '',
+    senderEmail: '',
+    senderName: '',
   });
 
   const [smsConfig, setSmsConfig] = useState({
     provider: 'twilio',
-    accountSid: 'AC••••••••••••••••••••••••••••••••',
-    authToken: '••••••••••••••••••••••••••••••••',
-    senderId: 'NotifyHub',
-    apiEndpoint: 'https://api.twilio.com/2010-04-01',
+    accountSid: '',
+    authToken: '',
+    senderId: '',
   });
 
   const [fcmConfig, setFcmConfig] = useState({
-    projectId: 'notifyhub-12345',
-    serverKey: '••••••••••••••••••••••••••••••••',
-    senderId: '123456789012',
-    serviceAccountJson: '{\n  "type": "service_account",\n  "project_id": "notifyhub-12345",\n  ...\n}',
+    projectId: '',
+    serverKey: '',
+    senderId: '',
+    serviceAccountJson: '',
   });
 
-  const [whatsappConfig, setWhatsappConfig] = useState({
-    provider: 'twilio',
-    accountSid: 'AC••••••••••••••••••••••••••••••••',
-    authToken: '••••••••••••••••••••••••••••••••',
-    phoneNumberId: '+1234567890',
-    businessAccountId: 'BA••••••••••••••',
-  });
+  useEffect(() => {
+    fetchConfigs();
+  }, []);
+
+  const fetchConfigs = async () => {
+    try {
+      const configs = await getConfigs();
+      const status = { ...channelStatus };
+
+      configs.forEach(config => {
+        if (config.provider === 'email') {
+           setEmailConfig({
+             smtpHost: config.credentials.smtpHost || '',
+             smtpPort: config.credentials.smtpPort || '587',
+             smtpUsername: config.credentials.smtpUsername || '',
+             smtpPassword: config.credentials.smtpPassword || '',
+             senderEmail: config.credentials.senderEmail || '',
+             senderName: config.credentials.senderName || '',
+           });
+           status.email = { enabled: config.isActive, verified: true };
+        } else if (config.provider === 'sms') {
+            setSmsConfig({
+                provider: config.credentials.provider || 'twilio',
+                accountSid: config.credentials.accountSid || '',
+                authToken: config.credentials.authToken || '',
+                senderId: config.credentials.senderId || '',
+            });
+            status.sms = { enabled: config.isActive, verified: true };
+        } else if (config.provider === 'fcm') {
+            setFcmConfig({
+                projectId: config.credentials.projectId || '',
+                serverKey: config.credentials.serverKey || '',
+                senderId: config.credentials.senderId || '',
+                serviceAccountJson: config.credentials.serviceAccountJson || '',
+            });
+            status.fcm = { enabled: config.isActive, verified: true };
+        }
+      });
+      setChannelStatus(status);
+    } catch (error: any) {
+      toast.error('Failed to load configurations');
+    }
+  };
 
   const toggleSecret = (field: string) => {
     setShowSecrets({ ...showSecrets, [field]: !showSecrets[field] });
   };
 
-  const handleSave = (channel: string) => {
-    alert(`${channel} configuration saved successfully!`);
+  const handleSave = async (provider: 'email' | 'sms' | 'fcm') => {
+    let credentials = {};
+    let providerId = '';
+
+    if (provider === 'email') {
+      credentials = emailConfig;
+      providerId = 'smtp';
+    } else if (provider === 'sms') {
+      credentials = smsConfig;
+      providerId = smsConfig.provider;
+    } else if (provider === 'fcm') {
+      credentials = fcmConfig;
+      providerId = 'firebase';
+    }
+
+    try {
+      const config: NotificationConfig = {
+        provider,
+        providerId,
+        credentials,
+        isActive: true,
+      };
+      await createOrUpdateConfig(config);
+      toast.success(`${provider.toUpperCase()} configuration saved successfully!`);
+      fetchConfigs();
+    } catch (error: any) {
+      toast.error(`Failed to save ${provider} configuration`);
+    }
   };
 
   const tabs = [
     { id: 'email' as const, label: 'Email (SMTP)', icon: Mail, color: 'text-blue-600' },
     { id: 'sms' as const, label: 'SMS Gateway', icon: MessageSquare, color: 'text-green-600' },
     { id: 'fcm' as const, label: 'Firebase FCM', icon: Smartphone, color: 'text-purple-600' },
-    { id: 'whatsapp' as const, label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-600' },
   ];
 
   return (
     <div className="space-y-6">
       {/* Channel Status Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {tabs.map(tab => {
           const Icon = tab.icon;
           const status = channelStatus[tab.id];
@@ -87,7 +147,7 @@ export function SystemSettings() {
                 {status.enabled ? (
                   status.verified ? 'Active & Verified' : 'Active - Needs Verification'
                 ) : (
-                  'Disabled'
+                  'Not Configured'
                 )}
               </div>
             </div>
@@ -198,13 +258,7 @@ export function SystemSettings() {
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
-                  onClick={() => alert('Testing email configuration...')}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Test Configuration
-                </button>
-                <button
-                  onClick={() => handleSave('Email')}
+                  onClick={() => handleSave('email')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   <Save className="w-5 h-5" />
@@ -279,26 +333,11 @@ export function SystemSettings() {
                       placeholder="NotifyHub or +1234567890"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm mb-2">API Endpoint</label>
-                    <input
-                      type="text"
-                      value={smsConfig.apiEndpoint}
-                      onChange={(e) => setSmsConfig({ ...smsConfig, apiEndpoint: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
-                  onClick={() => alert('Testing SMS configuration...')}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Test Configuration
-                </button>
-                <button
-                  onClick={() => handleSave('SMS')}
+                  onClick={() => handleSave('sms')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   <Save className="w-5 h-5" />
@@ -369,117 +408,7 @@ export function SystemSettings() {
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
-                  onClick={() => alert('Testing FCM configuration...')}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Test Configuration
-                </button>
-                <button
-                  onClick={() => handleSave('FCM')}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Save className="w-5 h-5" />
-                  Save Configuration
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* WhatsApp Configuration */}
-          {activeTab === 'whatsapp' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="mb-4">WhatsApp Business API Configuration</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm mb-2">Provider</label>
-                    <select
-                      value={whatsappConfig.provider}
-                      onChange={(e) => setWhatsappConfig({ ...whatsappConfig, provider: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="twilio">Twilio</option>
-                      <option value="meta">Meta Business API</option>
-                      <option value="messagebird">MessageBird</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-2">Account SID / App ID *</label>
-                    <div className="relative">
-                      <input
-                        type={showSecrets['wa-sid'] ? 'text' : 'password'}
-                        value={whatsappConfig.accountSid}
-                        onChange={(e) => setWhatsappConfig({ ...whatsappConfig, accountSid: e.target.value })}
-                        className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleSecret('wa-sid')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        {showSecrets['wa-sid'] ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-2">Auth Token / Access Token *</label>
-                    <div className="relative">
-                      <input
-                        type={showSecrets['wa-token'] ? 'text' : 'password'}
-                        value={whatsappConfig.authToken}
-                        onChange={(e) => setWhatsappConfig({ ...whatsappConfig, authToken: e.target.value })}
-                        className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleSecret('wa-token')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        {showSecrets['wa-token'] ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-2">Phone Number ID *</label>
-                    <input
-                      type="text"
-                      value={whatsappConfig.phoneNumberId}
-                      onChange={(e) => setWhatsappConfig({ ...whatsappConfig, phoneNumberId: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="+1234567890"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-2">Business Account ID</label>
-                    <input
-                      type="text"
-                      value={whatsappConfig.businessAccountId}
-                      onChange={(e) => setWhatsappConfig({ ...whatsappConfig, businessAccountId: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex gap-3">
-                  <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="text-sm text-yellow-900 mb-1">Verification Required</div>
-                    <div className="text-sm text-yellow-700">
-                      WhatsApp Business API requires verification. Make sure your business is verified with Meta/Twilio before sending messages.
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => alert('Testing WhatsApp configuration...')}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Test Configuration
-                </button>
-                <button
-                  onClick={() => handleSave('WhatsApp')}
+                  onClick={() => handleSave('fcm')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   <Save className="w-5 h-5" />

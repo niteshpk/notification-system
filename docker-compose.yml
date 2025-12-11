@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongo:
+    image: mongo:6.0
+    container_name: notification_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=notification-system
+
+  # Backend API
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: notification_server
+    ports:
+      - "5001:5000"
+    depends_on:
+      - mongo
+    environment:
+      - PORT=5000
+      - MONGO_URI=mongodb://mongo:27017/notification-system
+      - JWT_SECRET=dev_secret_key_123
+    links:
+      - mongo
+
+  # Frontend (Client) - Optional if running locally, but good for full stack
+  # client:
+  #   build:
+  #     context: ./client
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "5173:5173"
+  #   depends_on:
+  #     - server
+
+volumes:
+  mongo_data:
+

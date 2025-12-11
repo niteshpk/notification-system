@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Send, Mail, MessageSquare, Smartphone, Bell, CheckCircle, XCircle, Clock, Loader } from 'lucide-react';
+import { sendTestNotification, getNotificationLogs, NotificationLog } from '../services/notificationService';
+import { toast } from 'sonner';
 
 interface TestResult {
   id: string;
@@ -17,89 +19,74 @@ export function NotificationTesting() {
   const [recipient, setRecipient] = useState('');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
-  const [testResults, setTestResults] = useState<TestResult[]>([
-    {
-      id: '1',
-      channel: 'email',
-      recipient: 'test@example.com',
-      status: 'success',
-      message: 'Test email sent successfully',
-      timestamp: '2024-12-09 10:30:45',
-      duration: 1.2,
-    },
-    {
-      id: '2',
-      channel: 'sms',
-      recipient: '+1234567890',
-      status: 'success',
-      message: 'Test SMS delivered',
-      timestamp: '2024-12-09 10:28:12',
-      duration: 0.8,
-    },
-    {
-      id: '3',
-      channel: 'push',
-      recipient: 'device-token-abc123',
-      status: 'failed',
-      message: 'Failed to send push notification',
-      timestamp: '2024-12-09 10:25:33',
-      error: 'Invalid device token',
-    },
-  ]);
+  const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isSending, setIsSending] = useState(false);
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  const fetchLogs = async () => {
+    try {
+      const logs = await getNotificationLogs();
+      const formattedLogs: TestResult[] = logs.map(log => ({
+        id: log._id,
+        channel: log.channel,
+        recipient: log.recipient,
+        status: log.status === 'sent' ? 'success' : 'failed',
+        message: log.content,
+        timestamp: new Date(log.createdAt).toLocaleString(),
+        error: log.error,
+      }));
+      setTestResults(formattedLogs);
+    } catch (error) {
+      toast.error('Failed to load logs');
+    }
+  };
 
   const channels = [
     { id: 'email', label: 'Email', icon: Mail, color: 'bg-blue-500', placeholder: 'recipient@example.com' },
     { id: 'sms', label: 'SMS', icon: MessageSquare, color: 'bg-green-500', placeholder: '+1 234 567 8900' },
-    { id: 'push', label: 'Push Notification', icon: Smartphone, color: 'bg-purple-500', placeholder: 'Device Token or User ID' },
-    { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, color: 'bg-emerald-500', placeholder: '+1 234 567 8900' },
-    { id: 'inapp', label: 'In-App', icon: Bell, color: 'bg-orange-500', placeholder: 'user@example.com or User ID' },
+    { id: 'fcm', label: 'Push Notification (FCM)', icon: Smartphone, color: 'bg-purple-500', placeholder: 'Device Token or User ID' },
   ];
 
   const handleSendTest = async () => {
     if (!recipient || !message) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     setIsSending(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const newResult: TestResult = {
-        id: Date.now().toString(),
-        channel: selectedChannel,
+    const startTime = Date.now();
+
+    try {
+      // @ts-ignore
+      await sendTestNotification({
+        channel: selectedChannel as any,
         recipient,
-        status: Math.random() > 0.2 ? 'success' : 'failed',
-        message: `Test ${selectedChannel} notification`,
-        timestamp: new Date().toLocaleString('en-US', { 
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false 
-        }),
-        duration: Math.random() * 2 + 0.5,
-      };
+        subject,
+        content: message,
+      });
 
-      if (newResult.status === 'failed') {
-        newResult.error = 'Connection timeout - please check your configuration';
-      }
-
-      setTestResults([newResult, ...testResults]);
-      setIsSending(false);
+      const duration = (Date.now() - startTime) / 1000;
+      toast.success('Notification sent successfully');
+      
+      // Refresh logs
+      fetchLogs();
       
       // Clear form
       setRecipient('');
       setSubject('');
       setMessage('');
-    }, 2000);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to send notification');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleBulkTest = () => {
-    alert('Bulk testing feature - Send test notifications to multiple recipients');
+    toast.info('Bulk testing feature coming soon');
   };
 
   const selectedChannelData = channels.find(c => c.id === selectedChannel);
